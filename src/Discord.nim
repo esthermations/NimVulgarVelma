@@ -1,24 +1,20 @@
 import dimscord, asyncdispatch, options
 
 const
-  VelmaColour   = 0xff0000
   ApplicationID = "785169831208681482"
+  token         = slurp("../DiscordToken.txt")
+  commandPrefix = "."
 
 let
-  token   = readFile("./token.txt")
   discord = newDiscordClient(token)
 
-
-
-proc main() =
-  echo "Hello!"
+proc runDiscordBot*() =
+  echo "Running Discord server!"
   waitFor discord.startSession()
-
-
 
 proc onReady(s: Shard, r: Ready) {.event(discord).} =
   # I reckon this is where you'd register commands once it's all connected.
-  echo "Ready! I am " & $r.user
+  echo "Ready! I am ", $r.user
   echo "Registering commands!"
 
   discard discord.api.registerApplicationCommand(
@@ -33,12 +29,12 @@ proc onReady(s: Shard, r: Ready) {.event(discord).} =
     description    = "I will swear at you in an embed!",
   )
 
-
-
 proc interactionCreate(s: Shard, i: Interaction) {.event(discord).} =
-  echo "Got an interaction!"
+  if i.kind != itApplicationCommand: return
+  if i.data.isNone: return
 
-
+  if i.data.get().name == "ping":
+    echo "Got a ping command!"
 
 proc messageCreate(s: Shard, m: Message) {.event(discord).} =
   if m.author.bot: return
@@ -50,11 +46,6 @@ proc messageCreate(s: Shard, m: Message) {.event(discord).} =
       embed = some Embed(
         title       : some "Fuck!",
         description : some "Shit!",
-        color       : some VelmaColour
+        color       : some 0xff5000
       )
     )
-
-
-
-when isMainModule:
-  main()
