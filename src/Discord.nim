@@ -2,14 +2,13 @@ import dimscord, asyncdispatch, options
 
 const
   ApplicationID = "785169831208681482"
-  token         = slurp("../DiscordToken.txt")
   commandPrefix = "."
 
-let
-  discord = newDiscordClient(token)
+var discord = newDiscordClient("no token yet!!")
 
-proc runDiscordBot*() =
+proc runDiscordBot*(token: string) =
   echo "Running Discord server!"
+  discord.token = token
   waitFor discord.startSession()
 
 proc onReady(s: Shard, r: Ready) {.event(discord).} =

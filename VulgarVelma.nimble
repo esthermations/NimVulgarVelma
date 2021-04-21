@@ -11,4 +11,4 @@ bin           = @["VulgarVelma"]
 requires "nim >= 1.4.2"
 requires "cligen >= 1.5.0"
 requires "dimscord"
-requires "irc"
+requires "irc >= 0.4.0"

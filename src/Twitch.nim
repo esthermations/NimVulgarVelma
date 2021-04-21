@@ -1,70 +1,88 @@
-import net, irc, strformat, strutils, sugar
+import net, logging, irc, strformat, strutils, sugar, sequtils
 
 type
   Milliseconds = int # for readability in timeouts
-  CommandResponse = proc(e: IrcEvent): string
 
-  CommandName {.pure.} = enum
-    Hello
-    Lurk
+  Command = object
+    condition*: proc(e: IrcEvent): bool
+    response*: proc(e: IrcEvent): string
 
 const
+  botName* = "Hogsby"
   commandPrefix = "!"
-  oauthToken = slurp("../TwitchOAuthToken.txt")
-  botName = "VulgarVelma"
   channel = "#esthermations"
 
-  commands = [
-    Hello: (e: IrcEvent) => fmt"Hello, {e.nick}",
-    Lurk: (e: IrcEvent) => fmt"Have a nice lurk, {e.nick}!"
-  ]
+func containsCaseInsensitive*(haystack, needle: string): bool =
+  haystack.toLower().contains(needle.toLower())
 
-func messageText(e: IrcEvent): string =
-  assert e.typ == EvMsg
-  e.params[e.params.len - 1]
+func isCommand(e: IrcEvent, commandName: string): bool =
+  e.text.startsWith(commandPrefix & commandName)
+
+func isHumanCommand(e: IrcEvent, keywords: seq[string]): bool =
+  e.text.containsCaseInsensitive(botName) and
+  keywords.anyIt(e.text.containsCaseInsensitive(it))
+
+template simpleCommand(keyword, responseFmtStr: untyped): untyped =
+  Command(condition: (e: IrcEvent) => e.isCommand(keyword),
+          response : (e: IrcEvent) => &responseFmtStr)
+
+template humanCommand(keywords, responseFmtStr: untyped): untyped =
+  Command(condition: (e: IrcEvent) => e.isHumanCommand(keywords),
+          response : (e: IrcEvent) => &responseFmtStr)
+
+const commands = [
+  humanCommand(
+    keywords = @["hello", "hi", "greetings"],
+    responseFmtStr = "Hello, {e.nick}, wonderful to see you."
+  ),
+  humanCommand(
+    keywords = @["lurk"],
+    responseFmtStr = "Enjoy your lurk, {e.nick}, we appreciate you being here."
+  ),
+  humanCommand(
+    keywords = @["bye", "goodbye", "see you later"],
+    responseFmtStr = "Bye {e.nick}, see you soon! :)"
+  )
+]
 
 proc handleMessage(c: Irc, e: IrcEvent) =
   if e.nick.len == 0: return
 
-  var text = e.messageText()
+  for command in commands:
+    if command.condition(e):
+      let response = command.response(e)
+      info "Responding with: ", response
+      c.privmsg(channel, response)
 
-  if not text.startsWith(commandPrefix):
-    return
+proc runTwitchBot*(oauthToken: string) =
+  echo "Connecting with OAuth Token [", oauthToken, "]"
 
-  text.delete(0, commandPrefix.len - 1)
-  let cmd = parseEnum[CommandName](text.capitalizeAscii())
-  echo "Got command: ", cmd
+  let c = newIrc(
+    address    = "irc.twitch.tv",
+    port       = 6667.Port,
+    nick       = botName,
+    user       = botName,
+    serverPass = oauthToken,
+    joinChans  = @[channel]
+  )
 
-  let response = commands[cmd](e)
-  c.privmsg(channel, response)
-
-proc runTwitchBot*() =
-  let
-    c = newIrc(
-      address    = "irc.twitch.tv",
-      port       = 6667.Port,
-      nick       = botName,
-      user       = botName,
-      serverPass = oauthToken,
-      joinChans  = @[channel]
-    )
+  info "Commands: ", commands
 
   c.connect()
-  echo "Called connect()!"
+  info "Called connect()!"
 
   while true:
     var event: IrcEvent
     if c.poll(event, timeout = 500.Milliseconds):
       case event.typ:
       of EvConnected:
-        echo "Connected!"
+        info "Connected!"
       of EvDisconnected:
-        echo "Disconnected."
+        info "Disconnected."
       of EvMsg:
-        echo fmt"{event.nick}: {event.messageText()}"
+        info fmt"{event.nick}: {event.text}"
         c.handleMessage(event)
       else:
-        echo "Other event."
+        info "Event: ", event
     else:
       discard
-
